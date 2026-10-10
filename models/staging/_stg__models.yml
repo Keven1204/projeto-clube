@@ -1,0 +1,121 @@
+models:
+  - name: stg_clients
+    description: >
+      Cliente único e tipado. Uma linha por client_id. Textos normalizados,
+      data convertida e duplicata resolvida em favor do registro mais completo.
+    columns:
+      - name: client_id
+        description: Identificador do cliente, em maiúsculas e sem espaço. Chave da linha.
+        data_tests:
+          - unique
+          - not_null
+      - name: client_name
+        description: Nome do cliente em maiúsculas, sem espaço nas pontas. Vazio vira nulo.
+        data_tests:
+          - not_null
+      - name: city
+        description: Cidade em maiúsculas. Nula quando o arquivo não trouxe cidade.
+      - name: state
+        description: Sigla da unidade federativa em maiúsculas.
+        data_tests:
+          - not_null
+      - name: client_created_at
+        description: Data de cadastro do cliente.
+        data_tests:
+          - not_null
+
+  - name: stg_transactions
+    description: >
+      Movimentação válida e tipada. Uma linha por transaction_id. Remove
+      cliente ausente, quantidade ou preço não positivos e operação fora de
+      BUY/SELL. Lançamento repetido fica com o menor transaction_id.
+    columns:
+      - name: transaction_id
+        description: Identificador da movimentação. Chave da linha.
+        data_tests:
+          - unique
+          - not_null
+      - name: client_id
+        description: Cliente da movimentação. Nunca nulo depois do filtro.
+        data_tests:
+          - not_null
+      - name: asset_ticker
+        description: Ticker do ativo em maiúsculas.
+        data_tests:
+          - not_null
+      - name: operation
+        description: Operação normalizada. Só BUY ou SELL passam do filtro.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['BUY', 'SELL']
+      - name: quantity
+        description: Quantidade negociada, maior que zero.
+        data_tests:
+          - not_null
+      - name: unit_price
+        description: Preço unitário da movimentação, maior que zero.
+        data_tests:
+          - not_null
+      - name: transaction_date
+        description: Data em que a movimentação ocorreu.
+        data_tests:
+          - not_null
+
+unit_tests:
+  - name: test_stg_transactions_filters_invalid_and_deduplicates
+    description: >
+      Cliente vazio e quantidade negativa saem. Dois lançamentos iguais
+      permanecem como uma linha, a de menor transaction_id.
+    model: stg_transactions
+    given:
+      - input: ref('transactions')
+        rows:
+          - {
+              transaction_id: T001,
+              client_id: c1,
+              asset_ticker: petr4,
+              operation: buy,
+              quantity: "10",
+              unit_price: "2.50",
+              transaction_date: "2024-01-01"
+            }
+          - {
+              transaction_id: T002,
+              client_id: C1,
+              asset_ticker: PETR4,
+              operation: BUY,
+              quantity: "10",
+              unit_price: "2.50",
+              transaction_date: "2024-01-01"
+            }
+          - {
+              transaction_id: T003,
+              client_id: "",
+              asset_ticker: PETR4,
+              operation: BUY,
+              quantity: "10",
+              unit_price: "2.50",
+              transaction_date: "2024-01-02"
+            }
+          - {
+              transaction_id: T004,
+              client_id: C1,
+              asset_ticker: PETR4,
+              operation: BUY,
+              quantity: "-5",
+              unit_price: "2.50",
+              transaction_date: "2024-01-03"
+            }
+    expect:
+      rows:
+        - {
+            transaction_id: T001,
+            client_id: C1,
+            asset_ticker: PETR4,
+            operation: BUY,
+            quantity: 10,
+            unit_price: 2.50,
+            transaction_date: "2024-01-01"
+          }

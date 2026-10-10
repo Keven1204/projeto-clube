@@ -1,0 +1,88 @@
+seeds:
+  - name: clients
+    description: >
+      Cadastro bruto de clientes da corretora, carregado sem tratamento.
+      Uma linha por registro recebido. Duplicatas e campos vazios são
+      intencionais e devem ser sinalizados aqui, não corrigidos no CSV.
+    columns:
+      - name: client_id
+        description: Identificador do cliente como veio no arquivo. Pode repetir.
+        data_tests:
+          - unique:
+              config:
+                severity: warn
+          - not_null:
+              config:
+                severity: warn
+      - name: name
+        description: Nome do cliente como veio no arquivo, sem padronização.
+      - name: city
+        description: Cidade como veio no arquivo. Pode vir vazia em registro duplicado.
+      - name: state
+        description: Sigla da unidade federativa como veio no arquivo.
+      - name: created_at
+        description: Data de cadastro em texto (YYYY-MM-DD), sem conversão de tipo.
+
+  - name: transactions
+    description: >
+      Movimentações brutas da corretora, carregadas sem tratamento.
+      Uma linha por registro recebido. Identificador ausente, quantidade
+      inválida e lançamento repetido são intencionais e devem ser sinalizados
+      aqui, não corrigidos no CSV.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          config:
+            severity: warn
+          arguments:
+            combination_of_columns:
+              - client_id
+              - asset_ticker
+              - operation
+              - quantity
+              - unit_price
+              - transaction_date
+      - dbt_utils.expression_is_true:
+          name: transactions_quantity_is_positive
+          config:
+            severity: warn
+          arguments:
+            expression: "quantity::numeric > 0"
+    columns:
+      - name: transaction_id
+        description: Identificador da movimentação como veio no arquivo.
+        data_tests:
+          - unique:
+              config:
+                severity: warn
+          - not_null:
+              config:
+                severity: warn
+      - name: client_id
+        description: Cliente da movimentação. Pode vir vazio.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: asset_ticker
+        description: Ticker do ativo como veio no arquivo.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: operation
+        description: Operação como veio no arquivo. O domínio esperado é BUY ou SELL.
+        data_tests:
+          - accepted_values:
+              config:
+                severity: warn
+              arguments:
+                values: ['BUY', 'SELL']
+      - name: quantity
+        description: >
+          Quantidade em texto. Pode ser negativa. O teste de domínio faz o
+          cast para numeric porque a seed chega como texto, o que impede
+          accepted_range sem quebrar a execução.
+      - name: unit_price
+        description: Preço unitário em texto.
+      - name: transaction_date
+        description: Data da movimentação em texto (YYYY-MM-DD).

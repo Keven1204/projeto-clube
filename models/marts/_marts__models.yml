@@ -1,0 +1,236 @@
+models:
+  - name: fact_transactions
+    description: >
+      Fato de movimentações publicável. Uma linha por transaction_id.
+      Materialização incremental pela transaction_date: a cada execução
+      reprocessa o último dia já carregado e insere datas novas.
+      Dado atrasado de um dia anterior exige dbt run --full-refresh.
+    config:
+      access: public
+      contract:
+        enforced: true
+    columns:
+      - name: transaction_id
+        data_type: text
+        description: Identificador da movimentação. Chave da linha e unique_key do incremental.
+        data_tests:
+          - unique
+          - not_null
+      - name: client_id
+        data_type: text
+        description: Cliente da movimentação.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_clients')
+                field: client_id
+      - name: client_name
+        data_type: text
+        description: Nome do cliente gravado na fato.
+        data_tests:
+          - not_null
+      - name: asset_ticker
+        data_type: text
+        description: Ticker do ativo.
+        data_tests:
+          - not_null
+      - name: operation
+        data_type: text
+        description: BUY ou SELL.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['BUY', 'SELL']
+      - name: quantity
+        data_type: numeric(18,4)
+        description: Quantidade negociada, sempre positiva.
+        data_tests:
+          - not_null
+      - name: unit_price
+        data_type: numeric(18,2)
+        description: Preço unitário da movimentação.
+        data_tests:
+          - not_null
+      - name: gross_amount
+        data_type: numeric(18,4)
+        description: Valor financeiro absoluto da movimentação.
+        data_tests:
+          - not_null
+      - name: signed_quantity
+        data_type: numeric(18,4)
+        description: Quantidade com sinal. Positiva em BUY e negativa em SELL.
+        data_tests:
+          - not_null
+      - name: signed_amount
+        data_type: numeric(18,4)
+        description: Valor financeiro com sinal. Positivo em BUY e negativo em SELL.
+        data_tests:
+          - not_null
+      - name: transaction_date
+        data_type: date
+        description: Data da movimentação. Chave de controle do incremental.
+        data_tests:
+          - not_null
+
+  - name: dim_clients
+    description: Dimensão de clientes publicável. Uma linha por client_id.
+    config:
+      access: public
+      contract:
+        enforced: true
+    columns:
+      - name: client_id
+        data_type: text
+        description: Identificador do cliente. Chave da linha.
+        data_tests:
+          - unique
+          - not_null
+      - name: client_name
+        data_type: text
+        description: Nome do cliente em maiúsculas.
+        data_tests:
+          - not_null
+      - name: city
+        data_type: text
+        description: Cidade do cliente. Pode ser nula quando a origem não informou.
+      - name: state
+        data_type: text
+        description: Sigla da unidade federativa.
+        data_tests:
+          - not_null
+      - name: client_created_at
+        data_type: date
+        description: Data de cadastro do cliente.
+        data_tests:
+          - not_null
+
+  - name: mart_client_portfolio
+    description: >
+      Posição líquida atual por cliente e ativo. Uma linha por
+      client_id e asset_ticker. Quantidade e valor são BUY menos SELL.
+      Posição negativa não é filtrada: é problema de origem e o teste
+      singular assert_no_negative_position é quem a detecta.
+    config:
+      access: public
+      contract:
+        enforced: true
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - client_id
+              - asset_ticker
+    columns:
+      - name: client_id
+        data_type: text
+        description: Cliente da posição.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_clients')
+                field: client_id
+      - name: client_name
+        data_type: text
+        description: Nome do cliente.
+        data_tests:
+          - not_null
+      - name: asset_ticker
+        data_type: text
+        description: Ativo da posição.
+        data_tests:
+          - not_null
+      - name: bought_quantity
+        data_type: numeric(18,4)
+        description: Soma das quantidades de BUY.
+        data_tests:
+          - not_null
+      - name: sold_quantity
+        data_type: numeric(18,4)
+        description: Soma das quantidades de SELL.
+        data_tests:
+          - not_null
+      - name: net_quantity
+        data_type: numeric(18,4)
+        description: Posição em quantidade, BUY menos SELL. Pode ser negativa.
+        data_tests:
+          - not_null
+      - name: bought_amount
+        data_type: numeric(18,4)
+        description: Soma do valor financeiro dos BUY.
+        data_tests:
+          - not_null
+      - name: sold_amount
+        data_type: numeric(18,4)
+        description: Soma do valor financeiro dos SELL.
+        data_tests:
+          - not_null
+      - name: net_amount
+        data_type: numeric(18,4)
+        description: Posição em valor financeiro, BUY menos SELL. Pode ser negativa.
+        data_tests:
+          - not_null
+      - name: last_transaction_date
+        data_type: date
+        description: Data da última movimentação do par cliente e ativo.
+        data_tests:
+          - not_null
+
+unit_tests:
+  - name: test_mart_client_portfolio_nets_buy_and_sell
+    description: >
+      A posição líquida é a quantidade e o valor de BUY menos SELL
+      no grão cliente e ativo.
+    model: mart_client_portfolio
+    given:
+      - input: ref('fact_transactions')
+        rows:
+          - {
+              transaction_id: T1,
+              client_id: C1,
+              client_name: ANA SOUZA,
+              asset_ticker: PETR4,
+              operation: BUY,
+              quantity: 10,
+              unit_price: 2,
+              gross_amount: 20,
+              signed_quantity: 10,
+              signed_amount: 20,
+              transaction_date: "2024-01-01"
+            }
+          - {
+              transaction_id: T2,
+              client_id: C1,
+              client_name: ANA SOUZA,
+              asset_ticker: PETR4,
+              operation: SELL,
+              quantity: 4,
+              unit_price: 3,
+              gross_amount: 12,
+              signed_quantity: -4,
+              signed_amount: -12,
+              transaction_date: "2024-01-02"
+            }
+      - input: ref('dim_clients')
+        rows:
+          - {
+              client_id: C1,
+              client_name: ANA SOUZA,
+              city: SAO PAULO,
+              state: SP,
+              client_created_at: "2023-01-10"
+            }
+    expect:
+      rows:
+        - {
+            client_id: C1,
+            asset_ticker: PETR4,
+            bought_quantity: "10.0000",
+            sold_quantity: "4.0000",
+            net_quantity: "6.0000",
+            bought_amount: "20.0000",
+            sold_amount: "12.0000",
+            net_amount: "8.0000"
+          }

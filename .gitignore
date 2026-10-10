@@ -1,0 +1,14 @@
+target/
+dbt_packages/
+logs/
+.env
+.venv/
+__pycache__/
+*.pyc
+.user.yml
+
+.vscode/
+.cursor/
+dbt_internal_packages/
+
+Teste Técnico_Engenheiro-Dados-CDV.html
