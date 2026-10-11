@@ -20,7 +20,6 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 $env:DBT_PROFILES_DIR = "."
-dbt deps
 dbt seed
 dbt run
 dbt test
@@ -40,7 +39,6 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 export DBT_PROFILES_DIR=.
-dbt deps
 dbt seed
 dbt run
 dbt test
@@ -137,4 +135,4 @@ dbt docs generate
 dbt docs serve
 ```
 
-O workflow em `.github/workflows/ci.yml` sobe um PostgreSQL limpo e executa `dbt deps`, `dbt seed`, `dbt run`, `dbt test` e o lint. A pasta `ai/` descreve o uso futuro por agente e não participa desses comandos.
+O workflow em `.github/workflows/ci.yml` sobe um PostgreSQL limpo e executa `dbt seed`, `dbt run`, `dbt test` e o lint. A pasta `ai/` descreve o uso futuro por agente e não participa desses comandos.
