@@ -30,7 +30,7 @@ seeds:
       inválida e lançamento repetido são intencionais e devem ser sinalizados
       aqui, não corrigidos no CSV.
     data_tests:
-      - dbt_utils.unique_combination_of_columns:
+      - unique_combination_of_columns:
           config:
             severity: warn
           arguments:
@@ -41,7 +41,7 @@ seeds:
               - quantity
               - unit_price
               - transaction_date
-      - dbt_utils.expression_is_true:
+      - expression_is_true:
           name: transactions_quantity_is_positive
           config:
             severity: warn
